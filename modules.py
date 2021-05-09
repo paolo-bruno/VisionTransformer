@@ -8,7 +8,7 @@ class LinearProjectionAndFlattenedPatches(nn.Module):
         super().__init__()
         self.conv = nn.Conv2d(in_chans, embed_dim, kernel_size=(patch_size,), stride=(patch_size, ))
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.n = img_size**2 / patch_size**2
+        self.n = img_size**2 // patch_size**2
         self.pos_embed = nn.Parameter(torch.zeros(1, self.n+1, embed_dim))
 
     def forward(self, x):
@@ -41,16 +41,16 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, n_heads, embed_dim=768):
         super().__init__()
         self.n_heads = n_heads
-        self.d_h = embed_dim/self.n_heads
+        self.d_h = embed_dim//self.n_heads
 
         self.linear1 = nn.Linear(embed_dim, 3 * self.d_h)
         self.attentions = ScaledDotProductAttentions()
         self.linear2 = nn.Linear(self.n_heads*embed_dim, self.d_h)
 
-    def forward(self, x):
-        b, n, d = x.shape
-        x = self.linear(x).reshape(b, n, 3, -1).expand(-1, -1, -1, -1, self.n_heads)
-        q, k, v = x[:, :, 0, :, :], x[:, :, 1, :, :], x[:, :, 2, :, :]
+    def forward(self, z):
+        b, n, d = z.shape
+        z = self.linear(x).reshape(b, n, 3, -1).expand(-1, -1, -1, -1, self.n_heads)
+        q, k, v = z[:, :, 0, :, :], z[:, :, 1, :, :], z[:, :, 2, :, :]
         self_attentions = self.attentions(q, k, v)
         multihead_self_attention = torch.cat(self_attentions, dim=3)
         multihead_self_attention = self.linear2(multihead_self_attention)
@@ -63,21 +63,19 @@ class FeedForward(nn.Module):
         self.linear2 = nn.Linear(dim_inner_layer, embed_dim)
 
     def forward(self, x):
-        x = self.linear2(F.relu(self.linear1(x)))
-        return x
+        z = self.linear2(F.relu(self.linear1(x)))
+        return z
 
 
 class TransformerEncoder(nn.Module):
-    def __init__(self, n_heads=8):
+    def __init__(self, embed_dim=768, n_heads=8):
         super().__init__()
-        self.norm1 = nn.LayerNorm()
+        self.norm1 = nn.LayerNorm(embed_dim)
         self.msa = MultiHeadAttention(n_heads)
-        self.norm2 = nn.LayerNorm()
+        self.norm2 = nn.LayerNorm(embed_dim)
         self.mlp = FeedForward()
-        self.norm3 = nn.LayerNorm()
 
-    def forward(self, x):
-        x = self.msa(self.norm1(x)) + x
-        x = self.mlp(self.norm2(x)) + x
-        x = self.norm3(x)
-        return x
+    def forward(self, z):
+        z = self.msa(self.norm1(z)) + z
+        z = self.mlp(self.norm2(z)) + z
+        return z
