@@ -1,5 +1,7 @@
-import PIL
-import torch
+""" Vision Transformer utils
+A PyTorch utils for Vision Transformers (described in
+'An Image Is Worth 16 x 16 Words: Transformers for Image Recognition at Scale' - https://arxiv.org/abs/2010.11929)
+"""
 import torchvision
 from torchvision.transforms import transforms
 
@@ -8,9 +10,10 @@ def _cfg(**kwargs):
     return {**kwargs}
 
 
-cfg = {'vit_base_patch16_224': _cfg(embed_dim=768, depth=12, n_heads=12),
+cfg = {'vit_base_patch16_224': _cfg(embed_dim=768, depth=12, n_heads=12),   # with weights ported from official Google
+                                                                            # JAX impl
        'vit_large_patch16_224': _cfg(embed_dim=1024, depth=24, n_heads=16),
-       'vit_huge_patch16_224': _cfg(embed_dim=1280, depth=32, n_heads=16)}  # no weights available?
+       'vit_huge_patch16_224': _cfg(embed_dim=1280, depth=32, n_heads=16)}  # no weights available?!
 
 ViT_transform = transforms.Compose([
                     transforms.Resize(size=248, interpolation=torchvision.transforms.InterpolationMode.BICUBIC),
