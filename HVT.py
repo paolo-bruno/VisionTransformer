@@ -31,7 +31,7 @@ class LinearProjAndFlattenedPatches_noClsToken(nn.Module):
         b, c, h, w = x.shape
         x = self.proj(x)
         x = torch.flatten(x, start_dim=2)
-        # (B, N, D) is the shape for each batch of flattened patches
+        # transpose to have (B, N, D) as the shape for each batch of flattened patches
         x = torch.transpose(x, 1, 2)
         # In HVT there isn't cls_token (and relative concatenation between cls_token and x)
         return x + self.pos_embed
@@ -59,8 +59,9 @@ class Stage(nn.Module):
         )
 
     def forward(self, z):
-        z = self.first_trasformer(z)
+        z = self.first_trasformer(z)  # (B, N, D)
         z = self.max_pool(z.transpose(-2, -1)).transpose(-2, -1)
+        z = z + self.pos_embed
         z = self.last_transformers(z)
         return z
 
@@ -85,7 +86,6 @@ class HierarchicalVisualTransformer(nn.Module):
         self.linear = nn.Linear(embed_dim, num_cls)
 
     def forward(self, x):
-        # TODO check how to use layerNorm and for which dimension!
         # TODO check average pooling and the final dimension
         z = self.patch_embed(x)
         z = self.stages(z)
