@@ -86,7 +86,6 @@ class HierarchicalVisualTransformer(nn.Module):
         self.linear = nn.Linear(embed_dim, num_cls)
 
     def forward(self, x):
-        # TODO check average pooling and the final dimension
         z = self.patch_embed(x)
         z = self.stages(z)
         z = self.average_pool(self.norm(z).transpose(-2, -1)).transpose(-2, -1)
