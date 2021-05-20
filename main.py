@@ -2,8 +2,8 @@ import time
 
 import torch
 import torch.nn.functional as F
-from ViT import VisionTransformer
-from HVT import HierarchicalVisualTransformer
+from vision_transformer import VisionTransformer
+from hierarchical_visual_transformer import HierarchicalVisualTransformer
 from PIL import Image
 import ViT_utils as Utils
 from torch.utils.data import DataLoader

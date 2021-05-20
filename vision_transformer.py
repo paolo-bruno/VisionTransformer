@@ -1,11 +1,48 @@
-"""
-Vision Transformer (ViT) in PyTorch
+""" Vision Transformer (ViT) in PyTorch
+
 A PyTorch implement of Vision Transformers as described in
 'An Image Is Worth 16 x 16 Words: Transformers for Image Recognition at Scale' - https://arxiv.org/abs/2010.11929
+The implementation follows some defs and templates for compatibility with timm library's scripts,
+details in https://github.com/rwightman/pytorch-image-models
 """
+import logging
+from copy import deepcopy
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.transforms import InterpolationMode
+
+from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from timm.models.helpers import build_model_with_cfg, overlay_external_default_cfg
+from timm.models.registry import register_model
+
+_logger = logging.getLogger(__name__)
+
+
+def _cfg(url='', **kwargs):
+    return {
+        'url': url,
+        'num_classes': 1000, 'input_size': (3, 224, 224), 'pool_size': None,
+        'crop_pct': .9, 'interpolation': InterpolationMode.BICUBIC, 'fixed_input_size': True,
+        'mean': IMAGENET_DEFAULT_MEAN, 'std': IMAGENET_DEFAULT_STD,
+        'first_conv': 'patch_embed.proj', 'classifier': 'head',
+        **kwargs
+    }
+
+
+default_cfgs = {
+    # List of the configuration available
+    'my_vit_base_patch16_224': _cfg(
+        url=""
+    ),
+    'my_vit_base_patch16_384': _cfg(
+        url=""
+    ),
+    'my_vit_large_patch16_224': _cfg(
+        url=""
+    )
+}
 
 
 class LinearProjectionAndFlattenedPatches(nn.Module):
@@ -43,7 +80,7 @@ class ScaledDotProductAttentions(nn.Module):
     """
     Compute scaled dot produt attention
 
-    q, k, v have shape (b, n, n_heads, d_h)
+    q, k, v have shape (b, n, num_heads, d_h)
     """
     def __init__(self, d_h):
         super().__init__()
@@ -64,18 +101,18 @@ class MultiHeadAttention(nn.Module):
         See appendix A - https://arxiv.org/abs/2010.11929
         See the paper: 'Attention Is All You Need' - https://arxiv.org/abs/1706.03762
     """
-    def __init__(self, embed_dim=768, n_heads=12):
+    def __init__(self, embed_dim=768, num_heads=12):
         super().__init__()
-        self.n_heads = n_heads
-        self.d_h = embed_dim//self.n_heads
+        self.num_heads = num_heads
+        self.d_h = embed_dim//self.num_heads
 
-        self.qkv = nn.Linear(embed_dim, 3 * self.d_h * self.n_heads)
+        self.qkv = nn.Linear(embed_dim, 3 * self.d_h * self.num_heads)
         self.attentions = ScaledDotProductAttentions(self.d_h)
-        self.proj = nn.Linear(self.n_heads*self.d_h, embed_dim)
+        self.proj = nn.Linear(self.num_heads * self.d_h, embed_dim)
 
     def forward(self, z):
         b, n, d = z.shape
-        z = self.qkv(z).reshape(b, n, 3, self.n_heads, -1)
+        z = self.qkv(z).reshape(b, n, 3, self.num_heads, -1)
         z = z.permute(2, 0, 3, 1, 4)  # as in timm ViT implementation
         q, k, v = z[0], z[1], z[2]
         multihead_self_attention = self.attentions(q, k, v).transpose(1, 2).reshape(b, n, d)
@@ -107,10 +144,10 @@ class TransformerEncoder(nn.Module):
     Composed by tha alternation of multihead self-attention layers and MLP block (Feed Forward)
     LayerNorm is applied before every block, and residual connection after every block.
     """
-    def __init__(self, embed_dim=768, n_heads=12, mlp_ratio=4):
+    def __init__(self, embed_dim=768, num_heads=12, mlp_ratio=4):
         super().__init__()
         self.norm1 = nn.LayerNorm(embed_dim, eps=1e-6)
-        self.attn = MultiHeadAttention(embed_dim, n_heads)
+        self.attn = MultiHeadAttention(embed_dim, num_heads)
         self.norm2 = nn.LayerNorm(embed_dim, eps=1e-6)
         self.mlp = FeedForward(embed_dim, mlp_ratio)
 
@@ -126,9 +163,9 @@ class MLP_head(nn.Module):
 
     Implemented by a MLP with one hidden layer
     """
-    def __init__(self, embed_dim=768, num_cls=1000):
+    def __init__(self, embed_dim=768, num_classes=1000):
         super().__init__()
-        self.linear1 = nn.Linear(embed_dim, num_cls)
+        self.linear1 = nn.Linear(embed_dim, num_classes)
         self.norm = nn.LayerNorm(embed_dim, eps=1e-6)
 
     def forward(self, z):
@@ -143,17 +180,73 @@ class VisionTransformer(nn.Module):
     A PyTorch imp of: 'An Image Is Worth 16 x 16 Words: Transformers for Image Recognition at Scale'
     - https://arxiv.org/abs/2010.11929
     """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, num_cls=1000, embed_dim=768, depth=12, n_heads=12,
-                 mlp_ratio=4):
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12, num_heads=12,
+                 mlp_ratio=4, drop_rate=0.):
         super().__init__()
+        self.num_classes = num_classes
         self.patch_embed = LinearProjectionAndFlattenedPatches(img_size, patch_size, in_chans, embed_dim)
         self.blocks = nn.Sequential(
-            *[TransformerEncoder(embed_dim, n_heads, mlp_ratio) for i in range(depth)]
+            *[TransformerEncoder(embed_dim, num_heads, mlp_ratio) for i in range(depth)]
         )
-        self.head = MLP_head(embed_dim, num_cls)
+        self.head = MLP_head(embed_dim, num_classes)
 
     def forward(self, x):
         z = self.patch_embed(x)
         z = self.blocks(z)
         y = self.head(z[:, 0])
         return y
+
+
+def _create_vision_transformer(variant, pretrained=False, **kwargs):
+    default_cfg = deepcopy(default_cfgs[variant])
+    overlay_external_default_cfg(default_cfg, kwargs)
+    default_num_classes = default_cfg['num_classes']
+
+    num_classes = kwargs.pop('num_classes', default_num_classes)
+
+    if kwargs.get('features_only', None):
+        raise RuntimeError('features_only not implemented for Hierarchical Visual Transformer models.')
+
+    model = build_model_with_cfg(
+        VisionTransformer,
+        variant,
+        pretrained,
+        default_cfg=default_cfg,
+        num_classes=num_classes,
+        **kwargs)
+
+    return model
+
+
+@register_model
+def my_vit_base_patch16_224(pretrained=False, **kwargs):
+    """ My Vision Transformer (ViT) from original paper (https://arxiv.org/abs/2010.11929)
+
+    ViT base suitable for use by the timm library
+    (https://github.com/rwightman/pytorch-image-models)
+    """
+    model_kwargs = dict(embed_dim=768, depth=12, num_heads=12, **kwargs)
+    model = _create_vision_transformer('my_vit_base_patch16_224', pretrained=pretrained, **model_kwargs)
+    return model
+
+
+@register_model
+def my_vit_base_patch16_384(pretrained=False, ** kwargs):
+    """ My Vision Transformer (ViT) from original paper (https://arxiv.org/abs/2010.11929)
+
+    ViT base with image_size 384 (in the base version is 224) suitable for use by the timm library
+    """
+    model_kwargs = dict(img_size=384, embed_dim=768, depth=12, n_heads=12, **kwargs)
+    model = _create_vision_transformer('my_vit_base_patch16_384', pretrained=pretrained, **model_kwargs)
+    return model
+
+
+@register_model
+def my_vit_large_patch16_224(pretrained=False, ** kwargs):
+    """ My Vision Transformer (ViT) from original paper (https://arxiv.org/abs/2010.11929)
+
+    ViT large suitable for use by the timm library
+    """
+    model_kwargs = dict(embed_dim=1024, depth=24, n_heads=16, **kwargs)
+    model = _create_vision_transformer('my_vit_large_patch16_224', pretrained=pretrained, **model_kwargs)
+    return model

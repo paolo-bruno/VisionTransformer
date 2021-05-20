@@ -25,19 +25,22 @@ weigths_path = {
 
 ViT_transform = {
     'vit_base_patch16_224': transforms.Compose([
-                                transforms.Resize(size=248, interpolation=torchvision.transforms.InterpolationMode.BICUBIC),
+                                transforms.Resize(size=248,
+                                                  interpolation=torchvision.transforms.InterpolationMode.BICUBIC),
                                 transforms.CenterCrop(size=(224, 224)),
                                 transforms.ToTensor(),
                                 transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
                             ]),
     'vit_base_patch16_384': transforms.Compose([
-                                transforms.Resize(size=248, interpolation=torchvision.transforms.InterpolationMode.BICUBIC),
+                                transforms.Resize(size=248,
+                                                  interpolation=torchvision.transforms.InterpolationMode.BICUBIC),
                                 transforms.CenterCrop(size=(384, 384)),
                                 transforms.ToTensor(),
                                 transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
                             ]),
     'vit_large_patch16_224': transforms.Compose([
-                                transforms.Resize(size=248, interpolation=torchvision.transforms.InterpolationMode.BICUBIC),
+                                transforms.Resize(size=248,
+                                                  interpolation=torchvision.transforms.InterpolationMode.BICUBIC),
                                 transforms.CenterCrop(size=(224, 224)),
                                 transforms.ToTensor(),
                                 transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
