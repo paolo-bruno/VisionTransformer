@@ -259,3 +259,5 @@ Thumbs.db
 data
 
 # End of https://www.toptal.com/developers/gitignore/api/pycharm,python
+/imagenette2-320/
+/pytorch-image-models/
